@@ -34,6 +34,7 @@ def main():
     )
 
     # Overwrite args with detected names
+    args.hand_can = None
     if can_result.arm_can:
         args.can = can_result.arm_can
     elif not args.no_arm:
@@ -80,8 +81,29 @@ def main():
     else:
         print("[INIT] Arm disabled (--no-arm)")
 
-    # ── Step 4: LinkerHand (future) ──
-    # Will use args.hand_can when LinkerHand integration is ready
+    # ── Step 4: LinkerHand (optional) ──
+    hand_bridge = None
+    hand_thread = None
+    if not args.no_hand and args.hand_can:
+        try:
+            from app.core.hand import HandBridge, HandThread
+            from app.config import HAND_TYPE, HAND_JOINT
+            hand_bridge = HandBridge()
+            hand_thread = HandThread(
+                hand_bridge,
+                can_name=args.hand_can,
+                hand_type=HAND_TYPE,
+                hand_joint=HAND_JOINT,
+                hand_sdk_path=args.hand_sdk,
+            )
+            hand_thread.start()
+            print("[INIT] Hand thread started")
+        except Exception as e:
+            print(f"[INIT] Hand init failed: {e} — running without hand")
+            hand_bridge = None
+            hand_thread = None
+    else:
+        print("[INIT] Hand disabled (--no-hand or no CAN)")
 
     # ── Step 5: Create demos ──
     cal_demo = CalibrationDemo(cal_store, args, bridge=bridge, arm_thread=arm_thread)
@@ -108,8 +130,36 @@ def main():
     # ── Step 7: Default output = GUI ──
     tracking_demo.switch_output(OutputModeType.GUI)
 
-    # ── Step 8: Run main loop ──
-    demos = {"Calibration": cal_demo, "Tracking": tracking_demo}
+    # ── Step 8: Gesture demo (always visible) ──
+    from app.demos.gesture.demo import GestureDemo
+    from app.demos.gesture.gui_output import GestureGUIOutput
+
+    gesture_demo = GestureDemo(args)
+    gesture_demo.register_output(
+        OutputModeType.GUI,
+        GestureGUIOutput(gesture_demo),
+    )
+
+    if hand_bridge and hand_thread:
+        from app.demos.gesture.phys_dvs_output import GesturePhysDVSOutput
+        from app.demos.gesture.phys_rgb_output import GesturePhysRGBOutput
+        gesture_demo.register_output(
+            OutputModeType.PHYS_DVS,
+            GesturePhysDVSOutput(gesture_demo, hand_bridge, hand_thread),
+        )
+        gesture_demo.register_output(
+            OutputModeType.PHYS_RGB,
+            GesturePhysRGBOutput(gesture_demo, hand_bridge, hand_thread),
+        )
+
+    gesture_demo.switch_output(OutputModeType.GUI)
+
+    # ── Step 9: Run main loop ──
+    demos = {
+        "Calibration": cal_demo,
+        "Tracking": tracking_demo,
+        "Gesture": gesture_demo,
+    }
     loop = MainLoop(camera_mgr, demos, bridge=bridge, arm_thread=arm_thread)
 
     print()
@@ -122,6 +172,7 @@ def main():
     print("  [space]          — toggle tracking")
     print("  [c]              — clear canvas")
     print("  [v]              — cycle layout (GUI mode)")
+    print("  [m]              — toggle game mode (mirror/battle)")
     print("  [Enter]          — confirm calibration")
     print("  [d]              — re-detect RGB quad")
     print()
@@ -131,6 +182,11 @@ def main():
     except KeyboardInterrupt:
         print("\n[EXIT] Interrupted")
     finally:
+        # Cleanup hand
+        if hand_thread:
+            hand_thread.stop()
+            hand_thread.join(timeout=10.0)
+            print("[EXIT] Hand thread stopped")
         # Cleanup arm
         if arm_thread:
             arm_thread.stop()

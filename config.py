@@ -29,6 +29,27 @@ HYBRID_CONFIG = "/workspace/xenreal_001d/ESC001D_2D_RAW8_DV_RAW2.cfg"
 DEFAULT_DVS_CAL_PATH = os.path.join(EX15_DIR, "dvs_calibration.json")
 DEFAULT_LASER_PROFILE = os.path.join(EX16_DIR, "laser_profile.json")
 
+# ---------------------------------------------------------------------------
+# Gesture recognition constants
+# ---------------------------------------------------------------------------
+DVS_GESTURE_MODEL = (
+    "/workspace/gest/models/dvs_20260223_105731/best_loss_model.pth"
+)
+MEDIAPIPE_MODEL = (
+    "/workspace/gest/rgb/models/20260119_150909/gesture_recognizer.task"
+)
+HAND_SDK_PATH = "/workspace/linkerhand-python-sdk"
+
+# Gesture inference defaults (hardcoded — no CLI)
+GESTURE_CONF = 0.5
+DVS_HOLD_FRAMES = 10
+RGB_HOLD_FRAMES = 2
+GESTURE_VOTE_MODE = "none"
+DVS_NORMALIZE_CENTER = 9
+DVS_NORMALIZE_STEEPNESS = 3.0
+HAND_TYPE = "right"
+HAND_JOINT = "O6"
+
 
 def setup_sys_path() -> None:
     """Add required paths for importing existing modules."""
@@ -77,6 +98,8 @@ def parse_args() -> argparse.Namespace:
     # LinkerHand
     p.add_argument("--no-hand", action="store_true",
                     help="Disable LinkerHand hardware")
+    p.add_argument("--hand-sdk", default=HAND_SDK_PATH,
+                    help="Path to dir containing LinkerHand/ package")
 
     # CAN shared
     p.add_argument("--can-warmup", type=float, default=3.0,
