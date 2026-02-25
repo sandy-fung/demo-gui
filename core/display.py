@@ -19,7 +19,7 @@ LAYOUT_NAMES = ["FULL", "TRAJECTORY", "PIP"]
 # Tab bar
 TAB_BAR_HEIGHT = 36
 
-# Mode buttons (right side of tab bar)
+# Mode buttons
 MODE_BTN_W = 56
 MODE_BTN_GAP = 6
 MODE_BTN_PAD = 10
@@ -30,6 +30,8 @@ MODE_LABELS = {
 }
 MODE_ORDER = [OutputModeType.GUI, OutputModeType.PHYS_DVS, OutputModeType.PHYS_RGB]
 
+# Separate mode-button row (below tab bar)
+MODE_ROW_HEIGHT = 32
 
 SUB_TAB_BAR_HEIGHT = 28
 _SUB_BTN_W = 90
@@ -454,32 +456,106 @@ def sub_tab_from_click(
 
 
 # ---------------------------------------------------------------------------
+# Mode-button row (separate row below tab bar)
+# ---------------------------------------------------------------------------
+
+def render_mode_row(
+    modes: List[OutputModeType],
+    active: Optional[OutputModeType],
+    available: Set[OutputModeType],
+    width: int,
+    height: int = MODE_ROW_HEIGHT,
+) -> np.ndarray:
+    """Render a standalone mode-button row (below the tab bar).
+
+    Buttons are left-aligned. A thin separator line is drawn at the bottom.
+    """
+    bar = np.full((height, width, 3), (235, 235, 235), dtype=np.uint8)
+    n = len(modes)
+    if n == 0:
+        return bar
+
+    btn_x = MODE_BTN_PAD
+    y1, y2 = 4, height - 5
+
+    for mode in modes:
+        x1, x2 = btn_x, btn_x + MODE_BTN_W
+        label = MODE_LABELS.get(mode, mode.value)
+
+        if mode == active:
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (0, 140, 255), -1)
+            text_color = (255, 255, 255)
+        elif mode in available:
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (255, 255, 255), -1)
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (180, 180, 180), 1)
+            text_color = (60, 60, 60)
+        else:
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (210, 210, 210), -1)
+            text_color = (160, 160, 160)
+
+        ts = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)[0]
+        tx = x1 + (MODE_BTN_W - ts[0]) // 2
+        ty = (height + ts[1]) // 2 - 2
+        cv2.putText(bar, label, (tx, ty),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, text_color, 1, cv2.LINE_AA)
+
+        btn_x = x2 + MODE_BTN_GAP
+
+    # Bottom separator line
+    cv2.line(bar, (0, height - 1), (width, height - 1), (200, 200, 200), 1)
+    return bar
+
+
+def mode_row_click(
+    x: int, y: int,
+    modes: List[OutputModeType],
+    height: int = MODE_ROW_HEIGHT,
+) -> Optional[OutputModeType]:
+    """Hit-test a mode-button row. Return OutputModeType or None."""
+    if y >= height or len(modes) == 0:
+        return None
+    local_x = x - MODE_BTN_PAD
+    if local_x < 0:
+        return None
+    for i, mode in enumerate(modes):
+        bx = i * (MODE_BTN_W + MODE_BTN_GAP)
+        if bx <= local_x <= bx + MODE_BTN_W:
+            return mode
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Arm control buttons (HOME / DRAW)
 # ---------------------------------------------------------------------------
 
 ARM_BTN_W = 56
 ARM_BTN_GAP = 6
 ARM_BTN_PAD = 10
-ARM_BUTTONS = ["HOME", "DRAW"]
+ARM_BUTTONS = ["HOME", "DRAW", "PEN v", "PEN ^"]
+_ARM_SEP_AFTER = {"DRAW"}  # draw vertical separator after these labels
 
 
 def arm_buttons_width() -> int:
     """Total pixel width of the arm-button area (including separator gap)."""
     n = len(ARM_BUTTONS)
-    return ARM_BTN_PAD * 2 + n * ARM_BTN_W + max(0, n - 1) * ARM_BTN_GAP
+    # Extra space for vertical separators
+    sep_extra = len(_ARM_SEP_AFTER) * (ARM_BTN_GAP + 2)
+    return ARM_BTN_PAD * 2 + n * ARM_BTN_W + max(0, n - 1) * ARM_BTN_GAP + sep_extra
 
 
 def render_arm_buttons(
     at_home: bool,
     width: int,
     height: int = TAB_BAR_HEIGHT,
+    pen_down: bool = False,
 ) -> np.ndarray:
-    """Render HOME / DRAW buttons for the right side of the tab bar.
+    """Render HOME / DRAW / PEN buttons for the right side of the tab bar.
 
     Args:
-        at_home: True → HOME highlighted (green); False → DRAW highlighted (orange).
+        at_home: True → HOME highlighted; False → DRAW highlighted.
         width: pixel width of the button area.
         height: pixel height.
+        pen_down: current pen state (for PEN button highlighting).
     """
     bar = np.full((height, width, 3), (240, 240, 240), dtype=np.uint8)
 
@@ -500,6 +576,22 @@ def render_arm_buttons(
             # Working → DRAW orange highlight
             cv2.rectangle(bar, (x1, y1), (x2, y2), (0, 140, 255), -1)
             text_color = (255, 255, 255)
+        elif label == "PEN v" and at_home:
+            # Disabled when at home
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (210, 210, 210), -1)
+            text_color = (160, 160, 160)
+        elif label == "PEN v" and pen_down:
+            # Active: pen is down
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (0, 140, 255), -1)
+            text_color = (255, 255, 255)
+        elif label == "PEN ^" and at_home:
+            # Disabled when at home
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (210, 210, 210), -1)
+            text_color = (160, 160, 160)
+        elif label == "PEN ^" and not pen_down:
+            # Active: pen is up
+            cv2.rectangle(bar, (x1, y1), (x2, y2), (0, 140, 255), -1)
+            text_color = (255, 255, 255)
         else:
             # Inactive: white bg + gray border
             cv2.rectangle(bar, (x1, y1), (x2, y2), (255, 255, 255), -1)
@@ -514,6 +606,12 @@ def render_arm_buttons(
 
         btn_x = x2 + ARM_BTN_GAP
 
+        # Draw vertical separator after designated buttons
+        if label in _ARM_SEP_AFTER:
+            sep_x = btn_x + 1
+            cv2.line(bar, (sep_x, 6), (sep_x, height - 6), (180, 180, 180), 1)
+            btn_x += ARM_BTN_GAP + 2
+
     return bar
 
 
@@ -522,7 +620,7 @@ def arm_button_from_click(
     frame_width: int,
     reserved_right: int,
 ) -> Optional[str]:
-    """Return "HOME" or "DRAW" if click hits an arm button, else None.
+    """Return button label if click hits an arm button, else None.
 
     Args:
         reserved_right: total width of arm-button area (from render_arm_buttons).
@@ -535,10 +633,14 @@ def arm_button_from_click(
     local_x = x - area_start - ARM_BTN_PAD
     if local_x < 0:
         return None
+    # Walk through buttons accounting for separator gaps
+    bx = 0
     for i, label in enumerate(ARM_BUTTONS):
-        bx = i * (ARM_BTN_W + ARM_BTN_GAP)
         if bx <= local_x <= bx + ARM_BTN_W:
             return label
+        bx += ARM_BTN_W + ARM_BTN_GAP
+        if label in _ARM_SEP_AFTER:
+            bx += ARM_BTN_GAP + 2
     return None
 
 

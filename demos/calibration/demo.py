@@ -83,9 +83,6 @@ class CalibrationDemo(Demo):
                     self._store.set_rgb(self._rgb_quad)
 
     def deactivate(self) -> None:
-        # Reset pen UI state but do NOT auto go-home (user presses [HOME])
-        if self._sub_mode == "arm" and self._arm_panel is not None:
-            self._arm_panel.reset_pen_state()
         if self._camera_mgr:
             self._camera_mgr.switch_dvs_to_tracking()
 

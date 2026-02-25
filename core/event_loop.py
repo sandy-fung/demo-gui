@@ -8,7 +8,7 @@ from app.core.demo import Demo, OutputModeType
 from app.core.camera import CameraManager
 from app.core.display import (
     render_tab_bar, tab_index_from_click, TAB_BAR_HEIGHT,
-    render_mode_buttons, mode_button_from_click, mode_buttons_width,
+    render_mode_row, mode_row_click,
     render_arm_buttons, arm_button_from_click, arm_buttons_width,
     MODE_ORDER,
 )
@@ -29,8 +29,10 @@ class MainLoop:
         self._running = False
         self._frame_width = 800  # updated dynamically after first render
         self._shown_modes = []   # mode buttons currently displayed
+        self._mode_row_h = 0     # current height of mode-button row
         self._bridge = bridge
         self._arm_thread = arm_thread
+        self._pen_down = False
 
     def run(self) -> None:
         """Start the main loop (blocking)."""
@@ -52,30 +54,34 @@ class MainLoop:
                 self._shown_modes = MODE_ORDER
                 available = set(outputs.keys())
                 active_mode = self._active_demo._active_output_type
-                mode_w = mode_buttons_width(len(self._shown_modes))
             else:
                 self._shown_modes = []
-                mode_w = 0
 
-            # Arm buttons (right-most, only when bridge exists)
+            # Arm buttons (right-most on tab bar, only when bridge exists)
             arm_w = arm_buttons_width() if self._bridge else 0
-            reserved_right = mode_w + arm_w
+            reserved_right = arm_w
 
-            # Compose tab bar + demo frame
+            # Compose tab bar
             tabs = [(str(i + 1), name) for i, name in enumerate(self._demo_names)]
             tab_bar = render_tab_bar(tabs, self._active_name, frame.shape[1],
                                      reserved_right=reserved_right)
-            if self._shown_modes:
-                mode_bar = render_mode_buttons(
-                    self._shown_modes, active_mode, available, mode_w)
-                tab_bar[:, frame.shape[1] - reserved_right:
-                        frame.shape[1] - arm_w] = mode_bar
             if arm_w > 0:
                 at_home = (self._arm_thread.at_home
                            if self._arm_thread else True)
-                arm_bar = render_arm_buttons(at_home, arm_w)
+                arm_bar = render_arm_buttons(at_home, arm_w,
+                                             pen_down=self._pen_down)
                 tab_bar[:, frame.shape[1] - arm_w:] = arm_bar
-            composed = np.vstack([tab_bar, frame])
+
+            # Mode row (separate row below tab bar)
+            if self._shown_modes:
+                mode_row = render_mode_row(
+                    self._shown_modes, active_mode, available,
+                    frame.shape[1])
+                self._mode_row_h = mode_row.shape[0]
+                composed = np.vstack([tab_bar, mode_row, frame])
+            else:
+                self._mode_row_h = 0
+                composed = np.vstack([tab_bar, frame])
             cv2.imshow(WINDOW_NAME, composed)
 
             key = cv2.waitKey(1) & 0xFF
@@ -111,10 +117,23 @@ class MainLoop:
             return True
         # Arm control (global — works from any tab)
         if key == ord('h') and self._bridge:
+            self._pen_down = False
             self._bridge.put_safe_home()
             return True
         if key == ord('w') and self._bridge:
+            self._pen_down = False
             self._bridge.put(False, 0.5, 0.5)
+            return True
+        # Pen control (global — works from any tab, only when not at home)
+        if key == ord('p') and self._bridge and self._arm_thread \
+                and not self._arm_thread.at_home:
+            self._pen_down = True
+            self._bridge.put_pen_down()
+            return True
+        if key == ord('u') and self._bridge and self._arm_thread \
+                and not self._arm_thread.at_home:
+            self._pen_down = False
+            self._bridge.put_pen_up()
             return True
         return False
 
@@ -124,50 +143,64 @@ class MainLoop:
 
     def _mouse_callback(self, event: int, x: int, y: int,
                         flags: int, param) -> None:
-        """Handle mouse events for tab bar clicks."""
+        """Handle mouse events for tab bar and mode row clicks."""
+        header_h = TAB_BAR_HEIGHT + self._mode_row_h
+
         if event != cv2.EVENT_LBUTTONDOWN:
-            # Also forward mouse events to the active demo (for calibration
-            # corner dragging etc.) with y offset adjusted for tab bar.
+            # Forward non-click events to demo with y offset
             if self._active_demo and hasattr(self._active_demo, 'mouse_callback'):
                 self._active_demo.mouse_callback(
-                    event, x, y - TAB_BAR_HEIGHT, flags, param)
+                    event, x, y - header_h, flags, param)
             return
 
-        # Check if click is in tab bar area
-        arm_w = arm_buttons_width() if self._bridge else 0
-        mode_w = mode_buttons_width(len(self._shown_modes))
-        reserved_right = mode_w + arm_w
+        # --- Region 1: Tab bar (0 ~ TAB_BAR_HEIGHT) ---
+        if y < TAB_BAR_HEIGHT:
+            arm_w = arm_buttons_width() if self._bridge else 0
 
-        idx = tab_index_from_click(x, y, len(self._demo_names),
-                                   self._frame_width, reserved_right=reserved_right)
-        if idx is not None:
-            self._switch_demo(self._demo_names[idx])
+            # Arm button click (right side of tab bar)
+            if arm_w > 0:
+                btn = arm_button_from_click(x, y, self._frame_width, arm_w)
+                if btn == "HOME":
+                    self._pen_down = False
+                    self._bridge.put_safe_home()
+                    return
+                if btn == "DRAW":
+                    self._pen_down = False
+                    self._bridge.put(False, 0.5, 0.5)
+                    return
+                at_home = (self._arm_thread.at_home
+                           if self._arm_thread else True)
+                if btn == "PEN v" and not at_home:
+                    self._pen_down = True
+                    self._bridge.put_pen_down()
+                    return
+                if btn == "PEN ^" and not at_home:
+                    self._pen_down = False
+                    self._bridge.put_pen_up()
+                    return
+
+            # Tab click
+            reserved_right = arm_w
+            idx = tab_index_from_click(x, y, len(self._demo_names),
+                                       self._frame_width,
+                                       reserved_right=reserved_right)
+            if idx is not None:
+                self._switch_demo(self._demo_names[idx])
             return
 
-        # Check arm button click (right-most area)
-        if arm_w > 0:
-            btn = arm_button_from_click(x, y, self._frame_width, arm_w)
-            if btn == "HOME":
-                self._bridge.put_safe_home()
-                return
-            if btn == "DRAW":
-                self._bridge.put(False, 0.5, 0.5)
-                return
-
-        # Check mode button click (between tabs and arm buttons)
-        if self._shown_modes:
-            # Shift frame_width so mode_button_from_click sees its area
-            mode = mode_button_from_click(
-                x, y, self._shown_modes, self._frame_width - arm_w)
-            if mode is not None:
+        # --- Region 2: Mode row (TAB_BAR_HEIGHT ~ TAB_BAR_HEIGHT + mode_h) ---
+        if self._mode_row_h > 0 and y < header_h:
+            mode = mode_row_click(
+                x, y - TAB_BAR_HEIGHT, self._shown_modes)
+            if mode is not None and self._active_demo._outputs:
                 if mode in self._active_demo._outputs:
                     self._active_demo.switch_output(mode)
-                return
+            return
 
-        # Click in demo area — forward to demo with adjusted y
+        # --- Region 3: Demo content ---
         if self._active_demo and hasattr(self._active_demo, 'mouse_callback'):
             self._active_demo.mouse_callback(
-                event, x, y - TAB_BAR_HEIGHT, flags, param)
+                event, x, y - header_h, flags, param)
 
     # ------------------------------------------------------------------
     # Tab switching

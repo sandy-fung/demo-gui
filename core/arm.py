@@ -22,8 +22,10 @@ import threading
 import time
 from typing import Optional, Tuple
 
-# Sentinel value for safe-home command
+# Sentinel values for special commands
 _CMD_SAFE_HOME = "__SAFE_HOME__"
+_CMD_PEN_UP = "__PEN_UP__"
+_CMD_PEN_DOWN = "__PEN_DOWN__"
 
 
 class CommandBridge:
@@ -51,6 +53,14 @@ class CommandBridge:
             self._queue.put_nowait(_CMD_SAFE_HOME)
         except queue.Full:
             pass
+
+    def put_pen_up(self) -> None:
+        """Enqueue pen-up (lift at current XY)."""
+        self._queue.put_nowait(_CMD_PEN_UP)
+
+    def put_pen_down(self) -> None:
+        """Enqueue pen-down (lower at current XY)."""
+        self._queue.put_nowait(_CMD_PEN_DOWN)
 
     def clear(self) -> int:
         """Drain and discard all pending commands. Return count discarded."""
@@ -178,9 +188,15 @@ class ArmThread:
             if cmd is None:
                 continue
 
-            # Handle safe-home sentinel
+            # Handle sentinel commands
             if cmd is _CMD_SAFE_HOME:
                 self._go_safe_home()
+                continue
+            if cmd is _CMD_PEN_UP:
+                self._drawer.pen_up()
+                continue
+            if cmd is _CMD_PEN_DOWN:
+                self._drawer.pen_down()
                 continue
 
             write, x, y = cmd

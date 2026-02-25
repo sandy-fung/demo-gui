@@ -1,6 +1,7 @@
-"""Arm Calibration panel — gripper control & pen up/down.
+"""Arm Calibration panel — gripper control.
 
-Renders arm status, gripper progress bar with buttons, and pen down/up controls.
+Renders arm status and gripper progress bar with buttons.
+Pen up/down controls have been moved to global arm buttons (see display.py).
 """
 
 from typing import Optional
@@ -65,9 +66,6 @@ class ArmCalibrationPanel:
         self._gripper = None
         self._grip_pos_mm: float = 40.0  # target
 
-        # Pen state
-        self._pen_down = False
-
         # Click regions [(x1,y1,x2,y2, action), ...]
         self._buttons: list = []
 
@@ -95,22 +93,6 @@ class ArmCalibrationPanel:
             self._gripper.set_position_mm(pos)
 
     # ------------------------------------------------------------------
-    # Pen helpers
-    # ------------------------------------------------------------------
-
-    def _pen_down_cmd(self):
-        self._pen_down = True
-        self._bridge.put(True, 0.5, 0.5)
-
-    def _pen_up_cmd(self):
-        self._pen_down = False
-        self._bridge.put(False, 0.5, 0.5)
-
-    def reset_pen_state(self) -> None:
-        """Reset pen state to match safe-home (pen up)."""
-        self._pen_down = False
-
-    # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
@@ -127,14 +109,10 @@ class ArmCalibrationPanel:
         y += _SECTION_PAD
         y = self._render_gripper(canvas, y, width)
 
-        # ---- PEN CONTROL ----
-        y += _SECTION_PAD
-        y = self._render_pen_control(canvas, y, width)
-
         # ---- Hint bar ----
         draw_hint_bar(canvas, [
             "[O] open  [C] close  [< >] +/-1mm  [[ ]] +/-10mm",
-            "[P] pen down  [U] pen up  [Tab] switch sub-tab",
+            "[Tab] switch sub-tab",
         ])
 
         return canvas
@@ -217,28 +195,6 @@ class ArmCalibrationPanel:
 
         return btn_y + _BTN_H + 4
 
-    def _render_pen_control(self, img, y, w):
-        """PEN CONTROL section — Pen Down / Pen Up buttons + status badge."""
-        btn_w = 90
-        gap = 10
-
-        bx = _SECTION_PAD
-        r = _draw_button(img, bx, y, btn_w, "v Pen Down", active=self._pen_down)
-        self._buttons.append((*r, "pen_down"))
-
-        bx += btn_w + gap
-        r = _draw_button(img, bx, y, btn_w, "^ Pen Up", active=not self._pen_down)
-        self._buttons.append((*r, "pen_up"))
-
-        # Status badge
-        bx += btn_w + gap + 8
-        if self._pen_down:
-            _draw_badge(img, bx, y, "DOWN", _GREEN)
-        else:
-            _draw_badge(img, bx, y, "UP", _GRAY)
-
-        return y + _BTN_H + 4
-
     # ------------------------------------------------------------------
     # Key handling
     # ------------------------------------------------------------------
@@ -275,14 +231,6 @@ class ArmCalibrationPanel:
             self._send_grip()
             return True
 
-        if key in (ord('p'), ord('P')):
-            self._pen_down_cmd()
-            return True
-
-        if key in (ord('u'), ord('U')):
-            self._pen_up_cmd()
-            return True
-
         return False
 
     # ------------------------------------------------------------------
@@ -303,8 +251,4 @@ class ArmCalibrationPanel:
                 elif action == "close":
                     self._grip_pos_mm = 0.0
                     self._send_grip()
-                elif action == "pen_down":
-                    self._pen_down_cmd()
-                elif action == "pen_up":
-                    self._pen_up_cmd()
                 return
