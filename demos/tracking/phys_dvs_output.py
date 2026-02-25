@@ -54,11 +54,14 @@ class TrackingPhysDVSOutput(OutputMode):
         print("[PHYS_DVS] Activated — PAUSED (press Space to start tracking)")
 
     def deactivate(self) -> None:
-        """Stop DVSDrawingThread (arm stays in place — use [HOME] to go home)."""
+        """Stop DVSDrawingThread and return arm to center."""
         if self._drawing_thread:
             self._drawing_thread.stop()
             self._drawing_thread = None
-        print("[PHYS_DVS] Deactivated")
+        # Drain residual high-freq commands, then go center (pen up)
+        self._bridge.clear()
+        self._bridge.put(False, 0.5, 0.5)
+        print("[PHYS_DVS] Deactivated — arm returning to center")
 
     def on_tracking_changed(self, enabled: bool) -> None:
         if self._drawing_thread:
