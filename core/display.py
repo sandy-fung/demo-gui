@@ -139,6 +139,35 @@ def draw_hint_bar(
         y_cursor -= th + line_gap
 
 
+def draw_paused_overlay(frame: np.ndarray) -> None:
+    """Draw a semi-transparent dark overlay with PAUSED text on *frame* (in-place).
+
+    Used by physical output modes to indicate tracking is paused.
+    """
+    h, w = frame.shape[:2]
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+
+    # Large "PAUSED" text centered
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = min(w, h) / 300.0  # adaptive size
+    thickness = max(2, int(scale * 2))
+    (tw, th), _ = cv2.getTextSize("PAUSED", font, scale, thickness)
+    tx = (w - tw) // 2
+    ty = (h + th) // 2 - 20
+    cv2.putText(frame, "PAUSED", (tx, ty),
+                font, scale, (0, 0, 255), thickness, cv2.LINE_AA)
+
+    # Hint below
+    hint = "Press [Space] to start tracking"
+    hint_scale = scale * 0.4
+    hint_thick = max(1, int(hint_scale * 2))
+    (hw, hh), _ = cv2.getTextSize(hint, font, hint_scale, hint_thick)
+    cv2.putText(frame, hint, ((w - hw) // 2, ty + th + 10),
+                font, hint_scale, (220, 220, 220), hint_thick, cv2.LINE_AA)
+
+
 def compose_full(
     dvs_display: np.ndarray,
     rgb_display: np.ndarray,

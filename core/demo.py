@@ -32,6 +32,9 @@ class OutputMode(ABC):
     def render(self) -> np.ndarray:
         """Render output as BGR image for display."""
 
+    def on_tracking_changed(self, enabled: bool) -> None:
+        """Called when tracking is toggled. Override to propagate state."""
+
     def handle_key(self, key: int) -> bool:
         """Handle keypress. Return True if consumed."""
         return False

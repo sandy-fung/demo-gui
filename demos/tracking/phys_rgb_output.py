@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from app.core.demo import OutputMode
-from app.core.display import draw_hint_bar
+from app.core.display import draw_hint_bar, draw_paused_overlay
 
 
 class TrackingPhysRGBOutput(OutputMode):
@@ -21,16 +21,21 @@ class TrackingPhysRGBOutput(OutputMode):
         self._result = None
 
     def activate(self) -> None:
-        # Re-center arm only if currently at home (avoid nudge when already working)
-        if self._arm.at_home:
-            self._bridge.put(False, 0.5, 0.5)
-        print("[PHYS_RGB] Activated — arm follows RGB tracking")
+        # Start paused for safety — user must press Space to begin
+        self._demo.tracking_enabled = False
+        print("[PHYS_RGB] Activated — PAUSED (press Space to start tracking)")
 
     def deactivate(self) -> None:
         print("[PHYS_RGB] Deactivated")
 
+    def on_tracking_changed(self, enabled: bool) -> None:
+        if not enabled:
+            self._bridge.clear()
+
     def process(self, result) -> None:
         self._result = result
+        if not self._demo.tracking_enabled:
+            return
         # Push RGB warped coordinates to arm bridge
         if result.rgb_warped:
             nx, ny = result.rgb_warped
@@ -63,5 +68,8 @@ class TrackingPhysRGBOutput(OutputMode):
 
         cv2.putText(canvas, "Physical RGB", (8, 22),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 140, 255), 1)
+
+        if not self._demo.tracking_enabled:
+            draw_paused_overlay(canvas)
 
         return canvas

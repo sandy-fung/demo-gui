@@ -23,7 +23,8 @@ class TrackingGUIOutput(OutputMode):
         self._result = None
 
     def activate(self) -> None:
-        pass
+        # GUI has no safety concern — auto-restore tracking
+        self._demo.tracking_enabled = True
 
     def deactivate(self) -> None:
         pass

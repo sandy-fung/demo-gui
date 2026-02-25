@@ -10,7 +10,7 @@ import numpy as np
 
 from app.config import DVS_WIDTH, DVS_HEIGHT
 from app.core.demo import OutputMode
-from app.core.display import draw_hint_bar
+from app.core.display import draw_hint_bar, draw_paused_overlay
 
 
 class TrackingPhysDVSOutput(OutputMode):
@@ -48,10 +48,10 @@ class TrackingPhysDVSOutput(OutputMode):
             write_confirm=3,
         )
         self._drawing_thread.start()
-        # Re-center arm only if currently at home (avoid nudge when already working)
-        if self._arm.at_home:
-            self._bridge.put(False, 0.5, 0.5)
-        print("[PHYS_DVS] Activated — arm follows DVS tracking")
+        # Start paused for safety — user must press Space to begin
+        self._drawing_thread.tracking_enabled = False
+        self._demo.tracking_enabled = False
+        print("[PHYS_DVS] Activated — PAUSED (press Space to start tracking)")
 
     def deactivate(self) -> None:
         """Stop DVSDrawingThread (arm stays in place — use [HOME] to go home)."""
@@ -59,6 +59,10 @@ class TrackingPhysDVSOutput(OutputMode):
             self._drawing_thread.stop()
             self._drawing_thread = None
         print("[PHYS_DVS] Deactivated")
+
+    def on_tracking_changed(self, enabled: bool) -> None:
+        if self._drawing_thread:
+            self._drawing_thread.tracking_enabled = enabled
 
     def process(self, result) -> None:
         self._result = result
@@ -89,5 +93,8 @@ class TrackingPhysDVSOutput(OutputMode):
 
         cv2.putText(canvas, "Physical DVS", (8, 22),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 140, 255), 1)
+
+        if not self._demo.tracking_enabled:
+            draw_paused_overlay(canvas)
 
         return canvas

@@ -194,9 +194,9 @@ class TrackingDemo(Demo):
 
     def handle_key(self, key: int) -> bool:
         if key == ord(' '):
-            self._tracking_enabled = not self._tracking_enabled
-            if self._dvs_reader:
-                self._dvs_reader.tracking_enabled = self._tracking_enabled
+            self.tracking_enabled = not self._tracking_enabled
+            if self.active_output:
+                self.active_output.on_tracking_changed(self._tracking_enabled)
             print(f"[TRACK] Tracking {'ON' if self._tracking_enabled else 'OFF'}")
             return True
 
@@ -241,3 +241,9 @@ class TrackingDemo(Demo):
     @property
     def tracking_enabled(self) -> bool:
         return self._tracking_enabled
+
+    @tracking_enabled.setter
+    def tracking_enabled(self, value: bool) -> None:
+        self._tracking_enabled = value
+        if self._dvs_reader:
+            self._dvs_reader.tracking_enabled = value
