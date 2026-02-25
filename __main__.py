@@ -64,6 +64,11 @@ def main():
     # ── Step 2: Shared calibration store ──
     cal_store = CalibrationStore()
 
+    # ── Step 2.5: Eager-load gesture models (before arm moves) ──
+    from app.demos.gesture.demo import GestureDemo
+
+    gesture_demo = GestureDemo()
+
     # ── Step 3: Arm (optional) ──
     bridge = None
     arm_thread = None
@@ -130,11 +135,7 @@ def main():
     # ── Step 7: Default output = GUI ──
     tracking_demo.switch_output(OutputModeType.GUI)
 
-    # ── Step 8: Gesture demo (always visible) ──
-    from app.demos.gesture.demo import GestureDemo
-
-    gesture_demo = GestureDemo()
-
+    # ── Step 8: Gesture demo outputs ──
     if hand_bridge and hand_thread:
         from app.demos.gesture.phys_dvs_output import GesturePhysDVSOutput
         from app.demos.gesture.phys_rgb_output import GesturePhysRGBOutput
