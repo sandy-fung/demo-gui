@@ -42,7 +42,7 @@ DVS_GESTURE_MODEL = (
 MEDIAPIPE_MODEL = (
     "/workspace/gest/rgb/models/20260119_150909/gesture_recognizer.task"
 )
-HAND_SDK_PATH = "/workspace/linkerhand-python-sdk"
+HAND_SDK_PATH = "/workspace/gest/rgb"
 
 # Gesture inference defaults (hardcoded — no CLI)
 GESTURE_CONF = 0.5
