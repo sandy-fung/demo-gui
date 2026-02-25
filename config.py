@@ -69,7 +69,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--can", default="can0", help="CAN bus interface name")
     p.add_argument("--speed", type=float, default=0.3,
                     help="Arm movement speed")
+    p.add_argument("--usb-port", default=None,
+                    help="USB port address for CAN adapter (auto-detect if omitted)")
     p.add_argument("--no-arm", action="store_true",
                     help="Disable arm hardware")
+
+    # LinkerHand
+    p.add_argument("--no-hand", action="store_true",
+                    help="Disable LinkerHand hardware")
+
+    # CAN shared
+    p.add_argument("--can-warmup", type=float, default=3.0,
+                    help="Seconds to wait after CAN activation before hardware init")
 
     return p.parse_args()

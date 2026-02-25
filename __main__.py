@@ -3,6 +3,8 @@
 Launches the Unified GUI with calibration and tracking tabs.
 """
 
+import time
+
 from app.config import parse_args, setup_sys_path
 
 
@@ -22,7 +24,34 @@ def main():
     print("Unified GUI")
     print("=" * 50)
 
-    # 1. Init hardware (once)
+    # ── Step 0: Activate ALL CAN interfaces ──
+    from app.core.can_setup import setup_all_can
+
+    can_result = setup_all_can(
+        usb_port=args.usb_port,
+        skip_arm=args.no_arm,
+        skip_hand=args.no_hand,
+    )
+
+    # Overwrite args with detected names
+    if can_result.arm_can:
+        args.can = can_result.arm_can
+    elif not args.no_arm:
+        print(f"[INIT] Arm CAN failed: {can_result.arm_error} — running without arm")
+        args.no_arm = True
+
+    if can_result.hand_can:
+        args.hand_can = can_result.hand_can
+    elif not args.no_hand:
+        print(f"[INIT] Hand CAN failed: {can_result.hand_error} — running without hand")
+        args.no_hand = True
+
+    # Shared warm-up for both devices
+    if (can_result.arm_can or can_result.hand_can) and args.can_warmup > 0:
+        print(f"[INIT] Waiting {args.can_warmup}s for CAN warm-up...")
+        time.sleep(args.can_warmup)
+
+    # ── Step 1: Init cameras ──
     camera_mgr = CameraManager(args.dvs_camera, args.rgb_camera, args.rgb_rotate)
 
     print("[INIT] Starting DVS camera...")
@@ -31,10 +60,10 @@ def main():
     print("[INIT] Starting RGB camera...")
     camera_mgr.init_rgb()
 
-    # 2. Shared calibration store
+    # ── Step 2: Shared calibration store ──
     cal_store = CalibrationStore()
 
-    # 3. Arm (optional)
+    # ── Step 3: Arm (optional) ──
     bridge = None
     arm_thread = None
     if not args.no_arm:
@@ -51,11 +80,14 @@ def main():
     else:
         print("[INIT] Arm disabled (--no-arm)")
 
-    # 4. Create demos
+    # ── Step 4: LinkerHand (future) ──
+    # Will use args.hand_can when LinkerHand integration is ready
+
+    # ── Step 5: Create demos ──
     cal_demo = CalibrationDemo(cal_store, args, bridge=bridge, arm_thread=arm_thread)
     tracking_demo = TrackingDemo(cal_store, args)
 
-    # 5. Register output modes for tracking demo
+    # ── Step 6: Register output modes for tracking demo ──
     tracking_demo.register_output(
         OutputModeType.GUI,
         TrackingGUIOutput(tracking_demo),
@@ -73,10 +105,10 @@ def main():
             TrackingPhysRGBOutput(tracking_demo, bridge, arm_thread),
         )
 
-    # 6. Default output = GUI
+    # ── Step 7: Default output = GUI ──
     tracking_demo.switch_output(OutputModeType.GUI)
 
-    # 7. Run main loop
+    # ── Step 8: Run main loop ──
     demos = {"Calibration": cal_demo, "Tracking": tracking_demo}
     loop = MainLoop(camera_mgr, demos, bridge=bridge, arm_thread=arm_thread)
 
