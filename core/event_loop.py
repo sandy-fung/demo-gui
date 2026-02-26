@@ -12,8 +12,36 @@ from app.core.display import (
     render_arm_buttons, arm_button_from_click, arm_buttons_width,
     MODE_ORDER,
 )
+from app.core.memory_monitor import MemoryMonitor
 
 WINDOW_NAME = "Demo"
+
+
+def _draw_mem_bar(frame, rss_mb, peak_mb, warning=False):
+    """Draw a small memory-usage bar at the bottom-right of frame."""
+    if peak_mb <= 0:
+        return
+    BAR_W, BAR_H, MARGIN = 120, 14, 8
+    h, w = frame.shape[:2]
+    x1 = w - BAR_W - MARGIN
+    y1 = h - BAR_H - MARGIN
+    x2, y2 = x1 + BAR_W, y1 + BAR_H
+
+    # Gray border frame
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (80, 80, 80), 1)
+
+    # Filled portion (proportional to peak)
+    ratio = min(rss_mb / peak_mb, 1.0)
+    fill_w = int((BAR_W - 2) * ratio)
+    color = (0, 140, 255) if warning else (100, 100, 100)  # orange vs gray
+    cv2.rectangle(frame, (x1 + 1, y1 + 1),
+                  (x1 + 1 + fill_w, y2 - 1), color, -1)
+
+    # Text label
+    label = f"{rss_mb:.0f}M"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(frame, label, (x1 + 4, y2 - 3),
+                font, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
 
 class MainLoop:
@@ -33,6 +61,7 @@ class MainLoop:
         self._bridge = bridge
         self._arm_thread = arm_thread
         self._pen_down = False
+        self._mem_monitor = MemoryMonitor()
 
     def run(self) -> None:
         """Start the main loop (blocking)."""
@@ -82,6 +111,9 @@ class MainLoop:
             else:
                 self._mode_row_h = 0
                 composed = np.vstack([tab_bar, frame])
+            self._mem_monitor.tick()
+            _draw_mem_bar(composed, self._mem_monitor.rss_mb,
+                          self._mem_monitor.peak_mb, self._mem_monitor.warning)
             cv2.imshow(WINDOW_NAME, composed)
 
             key = cv2.waitKey(1) & 0xFF
