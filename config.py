@@ -67,10 +67,10 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Unified GUI")
 
     # Camera
-    p.add_argument("--dvs-camera", type=int, default=2,
-                    help="DVS /dev/video index")
-    p.add_argument("--rgb-camera", default="0",
-                    help="RGB camera index or path")
+    p.add_argument("--dvs-camera", type=int, default=None,
+                    help="DVS /dev/video index (auto-detect if omitted)")
+    p.add_argument("--rgb-camera", default=None,
+                    help="RGB camera index or path (auto-detect if omitted)")
 
     # Calibration
     p.add_argument("--dvs-cal", default=DEFAULT_DVS_CAL_PATH,

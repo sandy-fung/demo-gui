@@ -52,6 +52,27 @@ def main():
         print(f"[INIT] Waiting {args.can_warmup}s for CAN warm-up...")
         time.sleep(args.can_warmup)
 
+    # ── Step 0.5: Auto-detect cameras ──
+    from app.core.camera_detect import detect_cameras
+
+    cam_result = detect_cameras()
+
+    if args.dvs_camera is None:
+        if cam_result.dvs_device:
+            args.dvs_camera = int(cam_result.dvs_device.replace("/dev/video", ""))
+            print(f"[INIT] DVS detected: {cam_result.dvs_device} ({cam_result.dvs_name})")
+        else:
+            args.dvs_camera = 2  # fallback
+            print("[INIT] DVS not detected, using default /dev/video2")
+
+    if args.rgb_camera is None:
+        if cam_result.rgb_device:
+            args.rgb_camera = cam_result.rgb_device.replace("/dev/video", "")
+            print(f"[INIT] RGB detected: {cam_result.rgb_device} ({cam_result.rgb_name})")
+        else:
+            args.rgb_camera = "0"  # fallback
+            print("[INIT] RGB not detected, using default /dev/video0")
+
     # ── Step 1: Init cameras ──
     camera_mgr = CameraManager(args.dvs_camera, args.rgb_camera)
 
