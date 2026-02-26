@@ -60,12 +60,18 @@ class MainLoop:
         self._mode_row_h = 0     # current height of mode-button row
         self._bridge = bridge
         self._arm_thread = arm_thread
-        self._pen_down = False
         self._mem_monitor = MemoryMonitor()
+
+    @property
+    def _pen_down(self) -> bool:
+        """Query actual pen state from arm thread."""
+        if self._arm_thread is None:
+            return False
+        return self._arm_thread.pen_down
 
     def run(self) -> None:
         """Start the main loop (blocking)."""
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_GUI_NORMAL)
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
         cv2.setMouseCallback(WINDOW_NAME, self._mouse_callback)
 
         # Start on first tab
@@ -149,22 +155,18 @@ class MainLoop:
             return True
         # Arm control (global — works from any tab)
         if key == ord('h') and self._bridge:
-            self._pen_down = False
             self._bridge.put_safe_home()
             return True
         if key == ord('w') and self._bridge:
-            self._pen_down = False
             self._bridge.put(False, 0.5, 0.5)
             return True
         # Pen control (global — works from any tab, only when not at home)
         if key == ord('p') and self._bridge and self._arm_thread \
                 and not self._arm_thread.at_home:
-            self._pen_down = True
             self._bridge.put_pen_down()
             return True
         if key == ord('u') and self._bridge and self._arm_thread \
                 and not self._arm_thread.at_home:
-            self._pen_down = False
             self._bridge.put_pen_up()
             return True
         return False
@@ -193,21 +195,17 @@ class MainLoop:
             if arm_w > 0:
                 btn = arm_button_from_click(x, y, self._frame_width, arm_w)
                 if btn == "HOME":
-                    self._pen_down = False
                     self._bridge.put_safe_home()
                     return
                 if btn == "DRAW":
-                    self._pen_down = False
                     self._bridge.put(False, 0.5, 0.5)
                     return
                 at_home = (self._arm_thread.at_home
                            if self._arm_thread else True)
                 if btn == "PEN v" and not at_home:
-                    self._pen_down = True
                     self._bridge.put_pen_down()
                     return
                 if btn == "PEN ^" and not at_home:
-                    self._pen_down = False
                     self._bridge.put_pen_up()
                     return
 

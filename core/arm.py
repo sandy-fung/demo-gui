@@ -133,6 +133,13 @@ class ArmThread:
         """Whether arm is at safe home position."""
         return self._at_home
 
+    @property
+    def pen_down(self) -> bool:
+        """Whether pen is currently down (drawing)."""
+        if self._drawer is None:
+            return False
+        return self._drawer.is_writing()
+
     # ------------------------------------------------------------------
     # Thread internals
     # ------------------------------------------------------------------
@@ -141,7 +148,7 @@ class ArmThread:
         """Thread entry point."""
         try:
             self._init_arm()
-            self._at_home = True
+            self._at_home = False
             self.is_ready.set()
             self.is_running = True
             self._consume_loop()
@@ -220,12 +227,16 @@ class ArmThread:
 
         d = self._drawer
         # 1. Pen up
-        d.pen_up()
+        if not d.pen_up():
+            print("[ARM] Safe home aborted: pen_up failed")
+            return
         # 2. Lift 10cm above safe_z
-        d._move_to_xyz(
+        if not d._move_to_xyz(
             d._x, d._y, d.config.safe_z + 0.10,
             speed=d.config.move_speed, wait=True,
-        )
+        ):
+            print("[ARM] Safe home aborted: lift failed")
+            return
         # 3. Move to home joints (J1-J6 only; J7 gripper untouched)
         d.motion.move_joint(SAFE_HOME_JOINTS, speed_factor=d.config.move_speed)
         # 4. Wait until position reached
@@ -233,7 +244,6 @@ class ArmThread:
             SAFE_HOME_JOINTS, tolerance_rad=0.035, timeout_sec=10.0,
         )
         # 5. Reset drawing state (do NOT disable motors)
-        d._writing = False
         d._current_joints = list(SAFE_HOME_JOINTS)
         self._at_home = True
         print("[ARM] Safe home reached (motors still enabled)")
