@@ -19,18 +19,15 @@ class MemoryMonitor:
     """
 
     def __init__(self, check_interval: float = 30.0,
-                 gc_interval: float = 10.0,
                  warn_delta_mb: float = 10.0,
                  warmup: float = 120.0,
                  warn_duration: float = 5.0):
         self._check_interval = check_interval
-        self._gc_interval = gc_interval
         self._warn_delta = warn_delta_mb
         self._warmup = warmup            # seconds to skip after start
         self._warn_duration = warn_duration
         self._start_time = time.monotonic()
         self._last_check = 0.0
-        self._last_gc = 0.0
         self._last_rss: float = 0.0
         self._peak_rss: float = 0.0
         # Warning state
@@ -52,14 +49,14 @@ class MemoryMonitor:
         """True while memory growth alert is active."""
         return self._warn_msg is not None and time.monotonic() < self._warn_expire
 
+    def collect(self) -> None:
+        """Run garbage collection on demand (e.g. at demo switch)."""
+        gc.collect()
+
     def tick(self) -> None:
         if not _PSUTIL:
             return
         now = time.monotonic()
-        # Periodic GC
-        if now - self._last_gc >= self._gc_interval:
-            gc.collect()
-            self._last_gc = now
         # Periodic RSS check (skip warmup)
         if now - self._last_check >= self._check_interval:
             self._check_rss(now)
