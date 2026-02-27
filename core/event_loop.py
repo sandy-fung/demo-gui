@@ -242,6 +242,7 @@ class MainLoop:
             return
         if self._active_demo:
             self._active_demo.deactivate()
+        self._mem_monitor.collect()
         self._active_demo = self._demos[name]
         self._active_name = name
         self._active_demo.activate(self._camera_mgr)
