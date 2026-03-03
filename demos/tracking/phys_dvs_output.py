@@ -1,14 +1,14 @@
 """Physical DVS output — DVS tracking drives the robotic arm.
 
-When active, DVS tracking results are pushed to CommandBridge at ~200fps
-via DVSDrawingThread (replaces DVSReaderThread).
+When active, DVSReaderThread pushes tracking results to CommandBridge
+at ~200fps via set_bridge().  The thread itself never stops — only the
+bridge connection is toggled on activate/deactivate.
 Display shows single DVS canvas + arm status.
 """
 
 import cv2
 import numpy as np
 
-from app.config import DVS_WIDTH, DVS_HEIGHT, DVS_SCALE, CANVAS_SIZE, IDLE_CLEAR
 from app.core.demo import OutputMode
 from app.core.display import draw_hint_bar, draw_paused_overlay
 
@@ -21,64 +21,32 @@ class TrackingPhysDVSOutput(OutputMode):
         self._bridge = bridge
         self._arm = arm_thread
         self._result = None
-        self._drawing_thread = None
 
     def activate(self) -> None:
-        """Replace DVSReaderThread with DVSDrawingThread for 200fps bridge push."""
-        from main_dvs_drawing import DVSDrawingThread
-        from dvs_laser_tracker import DVSLaserTracker
-
-        # Stop the existing reader thread
-        if self._demo.dvs_reader:
-            self._demo.dvs_reader.stop()
- 
+        """Enable bridge on DVSReaderThread for 200fps arm push."""
         self._bridge.put(False, 0.5, 0.5)
-
-        # Create fresh tracker and start drawing thread
-        tracker = DVSLaserTracker(
-            width=DVS_WIDTH, height=DVS_HEIGHT,
-            noise_mask_path=self._demo._args.noise_mask,
-        )
-        # xe_cam is stored by TrackingDemo during activate()
-        self._drawing_thread = DVSDrawingThread(
-            self._demo._xe_cam, tracker,
-            self._demo._store.dvs_homography,
-            self._bridge,
-            scale=DVS_SCALE,
-            canvas_size=CANVAS_SIZE,
-            idle_clear=IDLE_CLEAR,
-            write_confirm=3,
-        )
-        self._drawing_thread.start()
-        # Start paused for safety — user must press Space to begin
-        self._drawing_thread.tracking_enabled = False
+        # Disable tracking BEFORE connecting bridge to prevent
+        # leaked writing commands (~200fps race window).
         self._demo.tracking_enabled = False
+        self._demo.dvs_reader.set_bridge(self._bridge)
         print("[PHYS_DVS] Activated — PAUSED (press Space to start tracking)")
 
     def deactivate(self) -> None:
-        """Stop DVSDrawingThread and return arm to center."""
-        if self._drawing_thread:
-            self._drawing_thread.stop()
-            self._drawing_thread = None
-        # Drain residual high-freq commands, then go center (pen up)
+        """Disconnect bridge from DVSReaderThread (thread keeps running)."""
+        if self._demo.dvs_reader:
+            self._demo.dvs_reader.set_bridge(None)
         self._bridge.clear()
-        print("[PHYS_DVS] Deactivated — arm returning to center")
+        print("[PHYS_DVS] Deactivated")
 
     def on_tracking_changed(self, enabled: bool) -> None:
-        if self._drawing_thread:
-            self._drawing_thread.tracking_enabled = enabled
+        pass  # dvs_reader.tracking_enabled is set by demo.tracking_enabled setter
 
     def process(self, result) -> None:
         self._result = result
 
     def render(self) -> np.ndarray:
-        # Single DVS canvas + arm status
-        if self._drawing_thread:
-            canvas = self._drawing_thread.render_canvas()
-        elif self._demo.dvs_reader:
-            canvas = self._demo.dvs_reader.render_canvas()
-        else:
-            canvas = np.zeros((400, 400, 3), dtype=np.uint8)
+        # Single DVS canvas + arm status (always use demo-level canvas)
+        canvas = self._demo.render_dvs_canvas()
 
         # Arm status hint bar
         canvas = canvas.copy()

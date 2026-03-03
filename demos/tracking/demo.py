@@ -7,6 +7,7 @@ Reuses existing components:
   - TrajectoryCanvas (from ex16)
 """
 
+import threading
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -40,6 +41,8 @@ class TrackingDemo(Demo):
         self._dvs_tracker = None      # DVSLaserTracker
         self._rgb_tracker = None      # LaserTracker
         self._rgb_canvas = None       # TrajectoryCanvas
+        self._dvs_canvas = None       # TrajectoryCanvas (persistent across mode switches)
+        self._dvs_canvas_lock = None  # threading.Lock
         self._quad_detector = None    # QuadDetector
         self._tracking_enabled = True
         # Latest tracking result for output modes
@@ -70,13 +73,18 @@ class TrackingDemo(Demo):
             width=DVS_WIDTH, height=DVS_HEIGHT,
             noise_mask_path=self._args.noise_mask,
         )
+
+        # DVS canvas — owned by demo, survives output mode switches
+        self._dvs_canvas = TrajectoryCanvas(
+            size=CANVAS_SIZE, idle_clear=IDLE_CLEAR, write_confirm=3)
+        self._dvs_canvas_lock = threading.Lock()
+
         self._dvs_reader = DVSReaderThread(
             camera_mgr.xe_cam, self._dvs_tracker,
             self._store.dvs_homography,
             scale=DVS_SCALE,
-            canvas_size=CANVAS_SIZE,
-            idle_clear=IDLE_CLEAR,
-            write_confirm=3,
+            canvas=self._dvs_canvas,
+            canvas_lock=self._dvs_canvas_lock,
         )
         self._dvs_reader.start()
 
@@ -194,8 +202,7 @@ class TrackingDemo(Demo):
             return True
 
         if key == ord('c'):
-            if self._dvs_reader:
-                self._dvs_reader.clear_canvas()
+            self.clear_dvs_canvas()
             if self._rgb_canvas:
                 self._rgb_canvas.clear()
             return True
@@ -224,8 +231,23 @@ class TrackingDemo(Demo):
         return self._dvs_reader
 
     @property
+    def dvs_canvas(self):
+        return self._dvs_canvas
+
+    @property
     def rgb_canvas(self):
         return self._rgb_canvas
+
+    def render_dvs_canvas(self) -> np.ndarray:
+        """Thread-safe render of the persistent DVS canvas."""
+        with self._dvs_canvas_lock:
+            return self._dvs_canvas.render()
+
+    def clear_dvs_canvas(self) -> None:
+        """Thread-safe clear of the persistent DVS canvas."""
+        if self._dvs_canvas is not None:
+            with self._dvs_canvas_lock:
+                self._dvs_canvas.clear()
 
     @property
     def result(self) -> TrackingResult:
@@ -238,5 +260,6 @@ class TrackingDemo(Demo):
     @tracking_enabled.setter
     def tracking_enabled(self, value: bool) -> None:
         self._tracking_enabled = value
+        # Also controls DVSReaderThread's bridge push (PHYS_DVS relies on this)
         if self._dvs_reader:
             self._dvs_reader.tracking_enabled = value

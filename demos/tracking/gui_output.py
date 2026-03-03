@@ -69,7 +69,7 @@ class TrackingGUIOutput(OutputMode):
                        result.rgb_warped)
 
         # Canvas images
-        dvs_canvas = self._demo.dvs_reader.render_canvas()
+        dvs_canvas = self._demo.render_dvs_canvas()
         rgb_canvas = self._demo.rgb_canvas.render()
 
         # Compose based on layout
