@@ -65,8 +65,12 @@ class CameraManager:
             return None
         return self._xe_cam.get_frame_laser_nparray()
 
-    def read_rgb_frame(self) -> Optional[np.ndarray]:
-        """Read one RGB frame, rotated per RGB_DISPLAY_ROTATE. Returns BGR or None.
+    def read_rgb_frame(self, rotate: bool = True) -> Optional[np.ndarray]:
+        """Read one RGB frame. Returns BGR or None.
+
+        Args:
+            rotate: Apply ``RGB_DISPLAY_ROTATE`` rotation (default True).
+                    Pass False to get the raw camera frame.
 
         Thread-safe: guarded by ``_rgb_lock`` so background inference threads
         and the main thread can call this without racing on VideoCapture.
@@ -77,15 +81,16 @@ class CameraManager:
             ret, frame = self._rgb_cap.read()
         if not ret:
             return None
-        from app.config import RGB_DISPLAY_ROTATE
-        _ROTATE_FLAGS = {
-            90: cv2.ROTATE_90_CLOCKWISE,
-            180: cv2.ROTATE_180,
-            270: cv2.ROTATE_90_COUNTERCLOCKWISE,
-        }
-        flag = _ROTATE_FLAGS.get(RGB_DISPLAY_ROTATE)
-        if flag is not None:
-            frame = cv2.rotate(frame, flag)
+        if rotate:
+            from app.config import RGB_DISPLAY_ROTATE
+            _ROTATE_FLAGS = {
+                90: cv2.ROTATE_90_CLOCKWISE,
+                180: cv2.ROTATE_180,
+                270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+            }
+            flag = _ROTATE_FLAGS.get(RGB_DISPLAY_ROTATE)
+            if flag is not None:
+                frame = cv2.rotate(frame, flag)
         return frame
 
     # ------------------------------------------------------------------
