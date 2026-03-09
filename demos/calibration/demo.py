@@ -6,6 +6,7 @@ unified MainLoop (no separate window).
 Sub-tabs: Page Calibration (default) and Arm Calibration (when arm present).
 """
 
+import threading
 from typing import Optional
 
 import cv2
@@ -116,6 +117,35 @@ class CalibrationDemo(Demo):
         # Nothing heavy to do; frames are read in render() for simplicity
         pass
 
+    def _grab_gray_safe(self, timeout: float = 2.0,
+                        max_retries: int = 3) -> Optional[np.ndarray]:
+        """Grab a gray frame with timeout to avoid XeGetFrame() hangs.
+
+        Runs grab_gray_frame() in a daemon thread so the main thread is
+        never blocked indefinitely after a DVS mode switch.
+        """
+        from quad_calibrator import grab_gray_frame
+
+        xe_cam = self._camera_mgr.xe_cam
+        for attempt in range(max_retries):
+            result = [None]
+
+            def _grab():
+                result[0] = grab_gray_frame(xe_cam)
+
+            t = threading.Thread(target=_grab, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+            if t.is_alive():
+                print(f"[CAL] WARNING: grab_gray_frame hung "
+                      f"(attempt {attempt + 1}/{max_retries})")
+                continue
+            return result[0]
+
+        print("[CAL] ERROR: grab_gray_frame failed after "
+              f"{max_retries} retries, returning black frame")
+        return None
+
     # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
@@ -144,13 +174,13 @@ class CalibrationDemo(Demo):
 
     def _render_page(self) -> np.ndarray:
         """Original page calibration render."""
-        from quad_calibrator import draw_overlay, grab_gray_frame
+        from quad_calibrator import draw_overlay
         from main_laser_drawing import draw_quad
 
         scale = DVS_SCALE
 
         # --- DVS panel ---
-        gray = grab_gray_frame(self._camera_mgr.xe_cam)
+        gray = self._grab_gray_safe()
         if gray is None:
             gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
         bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
