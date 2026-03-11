@@ -4,10 +4,13 @@ Same as phys_dvs_output but uses rgb_stable instead.
 Inference happens in the main thread so process() handles everything.
 """
 
+import time
+
 import numpy as np
 
+from app.config import GESTURE_ROUND_COOLDOWN
 from app.core.demo import OutputMode
-from app.core.display import draw_paused_overlay
+from app.core.display import draw_next_round_overlay, draw_paused_overlay
 from app.core.inference.common import BATTLE_MAP
 
 from .gui_output import _resolve_gesture, _draw_gesture_icon
@@ -23,18 +26,21 @@ class GesturePhysRGBOutput(OutputMode):
         self._result = None
         self._last_sent: str = ""
         self._was_moving: bool = False
+        self._cooldown_until: float = 0.0
 
     def activate(self) -> None:
         # Start paused for safety
         self._demo.tracking_enabled = False
         self._last_sent = ""
         self._was_moving = False
+        self._cooldown_until = 0.0
         print("[PHYS_RGB_GEST] Activated — PAUSED (press Space to start)")
 
     def deactivate(self) -> None:
         self._bridge.put_neutral()
         self._last_sent = ""
         self._was_moving = False
+        self._cooldown_until = 0.0
         print("[PHYS_RGB_GEST] Deactivated — hand returning to neutral")
 
     def on_tracking_changed(self, enabled: bool) -> None:
@@ -42,6 +48,7 @@ class GesturePhysRGBOutput(OutputMode):
             self._bridge.put_neutral()
             self._last_sent = ""
         self._was_moving = False
+        self._cooldown_until = 0.0
 
     def process(self, result) -> None:
         self._result = result
@@ -53,10 +60,21 @@ class GesturePhysRGBOutput(OutputMode):
             self._was_moving = True
             return
 
-        # Hand just arrived — flush stale voter data
+        # Hand just arrived — start cooldown
         if self._was_moving:
-            self._demo.reset_voters()
+            self._cooldown_until = time.perf_counter() + GESTURE_ROUND_COOLDOWN
             self._was_moving = False
+            return
+
+        # Cooldown active — wait
+        now = time.perf_counter()
+        if self._cooldown_until > 0:
+            if now < self._cooldown_until:
+                return
+            # Cooldown expired — reset voters and resume
+            self._demo.reset_voters()
+            self._last_sent = ""
+            self._cooldown_until = 0.0
             return
 
         stable = result.rgb_stable
@@ -86,5 +104,8 @@ class GesturePhysRGBOutput(OutputMode):
 
         if not self._demo.tracking_enabled:
             draw_paused_overlay(panel)
+        elif self._cooldown_until > 0:
+            remaining = max(0.0, self._cooldown_until - time.perf_counter())
+            draw_next_round_overlay(panel, remaining)
 
         return panel

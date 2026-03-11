@@ -188,6 +188,35 @@ def draw_paused_overlay(frame: np.ndarray) -> None:
                 font, hint_scale, (220, 220, 220), hint_thick, cv2.LINE_AA)
 
 
+def draw_next_round_overlay(frame: np.ndarray, remaining: float) -> None:
+    """Draw a semi-transparent overlay with NEXT ROUND text on *frame* (in-place).
+
+    Used by physical output modes to indicate cooldown between rounds.
+    """
+    h, w = frame.shape[:2]
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, dst=frame)
+
+    # Large "NEXT ROUND" text centered
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = min(w, h) / 300.0
+    thickness = max(2, int(scale * 2))
+    (tw, th), _ = cv2.getTextSize("NEXT ROUND", font, scale, thickness)
+    tx = (w - tw) // 2
+    ty = (h + th) // 2 - 20
+    cv2.putText(frame, "NEXT ROUND", (tx, ty),
+                font, scale, (0, 220, 0), thickness, cv2.LINE_AA)
+
+    # Hint below: countdown
+    hint = f"Starting in {remaining:.1f}s..."
+    hint_scale = scale * 0.4
+    hint_thick = max(1, int(hint_scale * 2))
+    (hw, hh), _ = cv2.getTextSize(hint, font, hint_scale, hint_thick)
+    cv2.putText(frame, hint, ((w - hw) // 2, ty + th + 10),
+                font, hint_scale, (220, 220, 220), hint_thick, cv2.LINE_AA)
+
+
 def compose_full(
     dvs_display: np.ndarray,
     rgb_display: np.ndarray,
