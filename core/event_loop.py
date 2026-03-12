@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from typing import Dict, Optional
 
-from app.core.demo import Demo, OutputModeType
+from app.core.demo import Demo
 from app.core.camera import CameraManager
 from app.config import DISPLAY_W, DISPLAY_H
 from app.core.display import (
@@ -153,16 +153,6 @@ class MainLoop:
         """Handle global key events. Return True if consumed."""
         if key == ord('q'):
             self._running = False
-            return True
-        # Output mode switching (only meaningful for tracking demo)
-        if key == ord('g'):
-            self._active_demo.switch_output(OutputModeType.GUI)
-            return True
-        if key == ord('e'):
-            self._active_demo.switch_output(OutputModeType.PHYS_DVS)
-            return True
-        if key == ord('r'):
-            self._active_demo.switch_output(OutputModeType.PHYS_RGB)
             return True
         # Arm control (global — works from any tab)
         if key == ord('h') and self._bridge:
