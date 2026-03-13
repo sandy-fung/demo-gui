@@ -60,10 +60,14 @@ class CameraManager:
         return self._xe_cam
 
     def read_dvs_frame(self) -> Optional[np.ndarray]:
-        """Read one DVS event frame. Returns (160, 164) uint8 or None."""
+        """Read one DVS event frame, rotated for display. Returns (164, 160) uint8 or None."""
         if self._xe_cam is None:
             return None
-        return self._xe_cam.get_frame_laser_nparray()
+        frame = self._xe_cam.get_frame_laser_nparray()
+        if frame is not None:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            frame = cv2.flip(frame, 1)
+        return frame
 
     def read_rgb_frame(self) -> Optional[np.ndarray]:
         """Read one RGB frame, rotated per RGB_DISPLAY_ROTATE. Returns BGR or None.

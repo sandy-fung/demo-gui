@@ -49,8 +49,9 @@ class CalibrationDemo(Demo):
         self._rgb_cam_size: tuple = (640, 480)
         # Frames
         self._camera_mgr = None
-        self._dvs_panel_w = DVS_WIDTH * DVS_SCALE
-        self._dvs_panel_h = DVS_HEIGHT * DVS_SCALE
+        # Rotated space: width=DVS_HEIGHT, height=DVS_WIDTH
+        self._dvs_panel_w = DVS_HEIGHT * DVS_SCALE
+        self._dvs_panel_h = DVS_WIDTH * DVS_SCALE
 
         # Sub-mode: "page", "arm", or "laser"
         self._has_arm = bridge is not None and arm_thread is not None
@@ -194,11 +195,14 @@ class CalibrationDemo(Demo):
 
         scale = DVS_SCALE
 
+        # Rotated dimensions: width=DVS_HEIGHT, height=DVS_WIDTH
+        rot_w, rot_h = DVS_HEIGHT, DVS_WIDTH
+
         # --- DVS panel ---
         if self._dvs_config_mode == "hybrid":
-            gray = self._grab_gray_safe()
+            gray = self._grab_gray_safe()  # already rotated by grab_gray_frame
             if gray is None:
-                gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
+                gray = np.zeros((rot_h, rot_w), dtype=np.uint8)
             bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         else:
             # dvs_only — render like gesture display (full dynamic range)
@@ -209,10 +213,13 @@ class CalibrationDemo(Demo):
             if dvs_raw is not None:
                 raw_2d = dvs_raw.reshape((DVS_HEIGHT, DVS_WIDTH))
                 gray = dvs_normalize(raw_2d, xe.g_xereal_bit_depth)
+                # Rotate to match read_dvs_frame convention
+                gray = cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                gray = cv2.flip(gray, 1)
             else:
                 gray = None
             if gray is None:
-                gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
+                gray = np.zeros((rot_h, rot_w), dtype=np.uint8)
             bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         dvs_panel = cv2.resize(
             bgr, (self._dvs_panel_w, self._dvs_panel_h),
@@ -406,8 +413,9 @@ class CalibrationDemo(Demo):
                     self._dragging_idx = idx
 
             elif event == cv2.EVENT_MOUSEMOVE and self._dragging_idx is not None:
-                nx = np.clip(x / scale, 0, DVS_WIDTH - 1)
-                ny = np.clip(y / scale, 0, DVS_HEIGHT - 1)
+                # Rotated space: w=DVS_HEIGHT, h=DVS_WIDTH
+                nx = np.clip(x / scale, 0, DVS_HEIGHT - 1)
+                ny = np.clip(y / scale, 0, DVS_WIDTH - 1)
                 self._dvs_corners[self._dragging_idx] = [nx, ny]
 
         elif x >= self._rgb_panel_offset_x and self._rgb_quad is not None:

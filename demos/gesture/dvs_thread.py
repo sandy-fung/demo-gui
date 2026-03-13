@@ -96,16 +96,25 @@ class DVSGestureThread:
 
             try:
                 raw_2d = frame.reshape((DVS_HEIGHT, DVS_WIDTH))
-                # Inference: sigmoid normalization
+
+                # Rotate for display (same convention as read_dvs_frame)
+                rotated = cv2.rotate(raw_2d, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                rotated = cv2.flip(rotated, 1)
+
+                # Inference path: unrotate back to original orientation
+                # (model expects original DVS sensor layout)
+                unrotated = cv2.flip(rotated, 1)
+                unrotated = cv2.rotate(unrotated, cv2.ROTATE_90_CLOCKWISE)
                 dvs_img = dvs_normalize_sigmoid(
-                    raw_2d.copy(), self._bit_depth,
+                    unrotated, self._bit_depth,
                     center=DVS_NORMALIZE_CENTER,
                     steepness=DVS_NORMALIZE_STEEPNESS,
                 )
                 if dvs_img is None:
                     continue
-                # Display: linear symmetric normalization
-                dvs_display_img = dvs_normalize(raw_2d, self._bit_depth)
+
+                # Display path: already rotated, use linear normalization
+                dvs_display_img = dvs_normalize(rotated, self._bit_depth)
             except Exception as e:
                 print(f"[DVS_GEST] Frame error: {e}")
                 continue
@@ -131,11 +140,11 @@ class DVSGestureThread:
             else:
                 fps = 0.0
 
-            # Build display image (using linear normalization)
+            # Build display image (already rotated)
             dvs_bgr = cv2.cvtColor(dvs_display_img, cv2.COLOR_GRAY2BGR)
             display = cv2.resize(
                 dvs_bgr,
-                (DVS_WIDTH * self._scale, DVS_HEIGHT * self._scale),
+                (DVS_HEIGHT * self._scale, DVS_WIDTH * self._scale),
                 interpolation=cv2.INTER_NEAREST,
             )
 
